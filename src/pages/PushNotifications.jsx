@@ -1,6 +1,54 @@
 import { useState, useEffect } from 'react';
-import { Send, Bell, Smartphone, Key, AlertCircle, CheckCircle2, Loader2, ExternalLink } from 'lucide-react';
+import { Send, Bell, Smartphone, Key, AlertCircle, CheckCircle2, Loader2, ExternalLink, Sparkles, Flame, Sun, Film, Compass, Image as ImageIcon } from 'lucide-react';
 import api from '../api';
+
+const PRESET_TEMPLATES = [
+  {
+    id: 'new_drop',
+    category: 'New Drop',
+    icon: Sparkles,
+    badgeColor: 'bg-amber-100 text-amber-800 border-amber-200',
+    title: '✨ Fresh Preset Drop: [Preset Name]',
+    message: 'Level up your photos! The new [Preset Name] Lightroom preset is now live and 100% free to import.',
+    image_url: ''
+  },
+  {
+    id: 'moody_cinematic',
+    category: 'Moody / Film',
+    icon: Film,
+    badgeColor: 'bg-indigo-100 text-indigo-800 border-indigo-200',
+    title: '🎬 New Moody Cinematic Preset Available',
+    message: 'Give your shots an editorial film look in 1 tap. Open Presetify to import into Adobe Lightroom Mobile now.',
+    image_url: ''
+  },
+  {
+    id: 'golden_hour',
+    category: 'Golden Hour',
+    icon: Sun,
+    badgeColor: 'bg-orange-100 text-orange-800 border-orange-200',
+    title: '🌅 Golden Hour Warm Tones Just Arrived',
+    message: 'Capture sunset magic on every photo. Download the latest free .DNG preset in Presetify today!',
+    image_url: ''
+  },
+  {
+    id: 'trending',
+    category: 'Trending',
+    icon: Flame,
+    badgeColor: 'bg-rose-100 text-rose-800 border-rose-200',
+    title: '🔥 Community Favorite: [Preset Name]',
+    message: 'Over 5,000+ creators imported this preset this week. Tap to get your free .DNG copy now!',
+    image_url: ''
+  },
+  {
+    id: 'travel_vibes',
+    category: 'Travel & Urban',
+    icon: Compass,
+    badgeColor: 'bg-teal-100 text-teal-800 border-teal-200',
+    title: '✈️ Wanderlust Tones for Your Travel Photos',
+    message: 'Turn everyday holiday shots into stunning postcards. Tap to open Presetify and edit in Lightroom.',
+    image_url: ''
+  }
+];
 
 const PushNotifications = () => {
   const [credentials, setCredentials] = useState({
@@ -21,10 +69,12 @@ const PushNotifications = () => {
     onesignal_subscribers: null
   });
 
+  const [recentPresets, setRecentPresets] = useState([]);
   const [loading, setLoading] = useState(true);
   const [sending, setSending] = useState(false);
   const [savingCreds, setSavingCreds] = useState(false);
   const [statusMessage, setStatusMessage] = useState(null);
+  const [activeTemplateId, setActiveTemplateId] = useState(null);
 
   useEffect(() => {
     fetchInitialData();
@@ -33,9 +83,10 @@ const PushNotifications = () => {
   const fetchInitialData = async () => {
     setLoading(true);
     try {
-      const [settingsRes, statsRes] = await Promise.all([
+      const [settingsRes, statsRes, presetsRes] = await Promise.all([
         api.get('get_settings.php'),
-        api.get('get_dashboard_stats.php')
+        api.get('get_dashboard_stats.php'),
+        api.get('list_wallpapers.php?page=1&limit=6').catch(() => ({ data: { data: [] } }))
       ]);
 
       if (settingsRes.data.status && settingsRes.data.data) {
@@ -53,11 +104,55 @@ const PushNotifications = () => {
           onesignal_subscribers: statsRes.data.data.onesignal_subscribers
         });
       }
+
+      if (presetsRes.data && Array.isArray(presetsRes.data.data)) {
+        setRecentPresets(presetsRes.data.data);
+      }
     } catch (err) {
       console.error(err);
     } finally {
       setLoading(false);
     }
+  };
+
+  const handleApplyTemplate = (tmpl, preset = null) => {
+    setActiveTemplateId(tmpl.id);
+    const presetName = preset ? preset.title : 'Vintage Film';
+    const presetUrl = preset ? `https://api.devkayy.in/${preset.thumbnail_path}` : notification.image_url;
+
+    const populatedTitle = tmpl.title.replace(/\[Preset Name\]/g, presetName);
+    const populatedMessage = tmpl.message.replace(/\[Preset Name\]/g, presetName);
+
+    setNotification((prev) => ({
+      ...prev,
+      title: populatedTitle,
+      message: populatedMessage,
+      image_url: presetUrl || prev.image_url
+    }));
+  };
+
+  const handlePickPreset = (preset) => {
+    const fullImgUrl = `https://api.devkayy.in/${preset.thumbnail_path}`;
+    setNotification((prev) => {
+      let title = prev.title;
+      let message = prev.message;
+      if (!title) {
+        title = `✨ New Preset: ${preset.title}`;
+      } else {
+        title = title.replace(/\[Preset Name\]/g, preset.title);
+      }
+      if (!message) {
+        message = `Download "${preset.title}" (${preset.category_name || 'Free'}) now in Presetify and import straight to Lightroom!`;
+      } else {
+        message = message.replace(/\[Preset Name\]/g, preset.title);
+      }
+      return {
+        ...prev,
+        title,
+        message,
+        image_url: fullImgUrl
+      };
+    });
   };
 
   const handleSaveCredentials = async (e) => {
@@ -182,6 +277,73 @@ const PushNotifications = () => {
               Compose Notification
             </h3>
             <p className="text-sm text-gray-500 mt-0.5">Dispatches instantly to all subscribed user devices.</p>
+          </div>
+
+          {/* Preset Notification Format / Templates */}
+          <div className="space-y-3 bg-gradient-to-br from-gray-50 to-indigo-50/30 p-4 sm:p-5 rounded-2xl border border-gray-200/80">
+            <div className="flex items-center justify-between">
+              <span className="text-xs font-bold text-gray-700 uppercase tracking-wider flex items-center gap-1.5">
+                <Sparkles size={14} className="text-amber-500" />
+                Preset Notification Formats &amp; Templates
+              </span>
+              <span className="text-[11px] text-gray-500 font-medium">Click to auto-fill</span>
+            </div>
+
+            <div className="grid grid-cols-1 sm:grid-cols-2 gap-2.5">
+              {PRESET_TEMPLATES.map((tmpl) => {
+                const IconComponent = tmpl.icon;
+                const isSelected = activeTemplateId === tmpl.id;
+                return (
+                  <button
+                    key={tmpl.id}
+                    type="button"
+                    onClick={() => handleApplyTemplate(tmpl)}
+                    className={`text-left p-3 rounded-xl border transition-all duration-200 ${
+                      isSelected
+                        ? 'bg-gray-900 text-white border-gray-900 shadow-sm'
+                        : 'bg-white hover:bg-gray-100/80 text-gray-800 border-gray-200 hover:border-gray-300'
+                    }`}
+                  >
+                    <div className="flex items-center gap-2 mb-1">
+                      <span className={`p-1 rounded-md ${isSelected ? 'bg-gray-800 text-amber-300' : tmpl.badgeColor}`}>
+                        <IconComponent size={13} />
+                      </span>
+                      <span className="text-xs font-bold truncate">{tmpl.category}</span>
+                    </div>
+                    <div className={`text-xs font-semibold truncate ${isSelected ? 'text-gray-200' : 'text-gray-900'}`}>
+                      {tmpl.title}
+                    </div>
+                    <div className={`text-[11px] line-clamp-1 mt-0.5 ${isSelected ? 'text-gray-400' : 'text-gray-500'}`}>
+                      {tmpl.message}
+                    </div>
+                  </button>
+                );
+              })}
+            </div>
+
+            {/* Quick Live Preset Autofill */}
+            {recentPresets.length > 0 && (
+              <div className="pt-3 border-t border-gray-200/60 mt-2">
+                <div className="text-[11px] font-semibold text-gray-500 uppercase tracking-wider mb-2 flex items-center gap-1">
+                  <ImageIcon size={12} />
+                  Insert Live Preset &amp; Banner from Library:
+                </div>
+                <div className="flex flex-wrap gap-1.5">
+                  {recentPresets.map((preset) => (
+                    <button
+                      key={preset.id}
+                      type="button"
+                      onClick={() => handlePickPreset(preset)}
+                      className="inline-flex items-center gap-1.5 px-2.5 py-1 bg-white hover:bg-gray-100 border border-gray-200 rounded-lg text-xs font-medium text-gray-800 transition active:scale-95 shadow-2xs"
+                      title={`Autofill title & image for "${preset.title}"`}
+                    >
+                      <span className="w-1.5 h-1.5 rounded-full bg-emerald-500"></span>
+                      <span className="truncate max-w-[120px]">{preset.title}</span>
+                    </button>
+                  ))}
+                </div>
+              </div>
+            )}
           </div>
 
           <form onSubmit={handleSendNotification} className="space-y-5">
